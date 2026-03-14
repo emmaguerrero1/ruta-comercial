@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>CRM Ruta Comercial</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+
+<style>
+
+body{
+font-family:Arial;
+background:#f5f7fa;
+margin:0;
+padding:20px;
+}
+
+h1{
+text-align:center;
+}
+
+.container{
+display:flex;
+gap:20px;
+flex-wrap:wrap;
+}
+
+.panel{
+background:white;
+padding:15px;
+border-radius:10px;
+box-shadow:0 0 8px rgba(0,0,0,0.1);
+width:350px;
+}
+
+#map{
+height:600px;
+flex:1;
+border-radius:10px;
+}
+
+input,select,textarea{
+width:100%;
+padding:8px;
+margin-top:5px;
+margin-bottom:10px;
+}
+
+button{
+background:#2b7cff;
+color:white;
+border:none;
+padding:10px;
+border-radius:6px;
+cursor:pointer;
+}
+
+.stats{
+display:flex;
+gap:10px;
+flex-wrap:wrap;
+}
+
+.card{
+background:white;
+padding:10px;
+border-radius:8px;
+box-shadow:0 0 5px rgba(0,0,0,0.1);
+}
+
+</style>
+
+</head>
+
+<body>
+
+<h1>📍 CRM Ruta Comercial</h1>
+
+<div class="stats">
+
+<div class="card">🚪 Puertas: <span id="puertas">0</span></div>
+<div class="card">✅ Ventas: <span id="ventas">0</span></div>
+<div class="card">📅 Citas: <span id="citas">0</span></div>
+<div class="card">❌ No quieren: <span id="no">0</span></div>
+
+</div>
+
+<br>
+
+<label>📅 Día</label>
+<input type="date" id="dia">
+
+<div class="container">
+
+<div class="panel">
+
+<h3>Registrar dirección</h3>
+
+<input placeholder="Dirección" id="direccion">
+
+<select id="tipo">
+<option>Casa</option>
+<option>Negocio</option>
+</select>
+
+<select id="estado" onchange="mostrarCampos()">
+
+<option value="">Estado cliente</option>
+
+<option value="venta">✅ Cliente realizado</option>
+<option value="cita">📅 Cita otro día</option>
+<option value="noestaba">🚪 No estaba</option>
+<option value="pasar">🔁 Pasar después</option>
+<option value="responsable">👔 No hay responsable</option>
+<option value="noquieren">❌ No quieren</option>
+<option value="novolver">🚫 No volver</option>
+
+</select>
+
+<div id="crm" style="display:none">
+
+<h4>Datos cliente</h4>
+
+<input placeholder="Nombre cliente" id="nombre">
+<input placeholder="Tipo instalación" id="instalacion">
+<input placeholder="Teléfono" id="telefono">
+<input placeholder="Correo" id="correo">
+
+<textarea placeholder="Datos relevantes" id="datos"></textarea>
+
+</div>
+
+<div id="citaBox" style="display:none">
+
+<textarea id="detalleCita" placeholder="Detalles de cita"></textarea>
+
+</div>
+
+<div id="notaBox" style="display:none">
+
+<textarea id="nota" placeholder="Nota"></textarea>
+
+</div>
+
+<button onclick="guardar()">Guardar</button>
+
+</div>
+
+<div id="map"></div>
+
+</div>
+
+<br>
+
+<button onclick="exportar()">📤 Exportar Excel</button>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+
+let mapa = L.map('map').setView([41.6488,-0.8891],13)
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(mapa)
+
+let datos = JSON.parse(localStorage.getItem("rutaDatos")) || []
+
+actualizarStats()
+
+function mostrarCampos(){
+
+let estado=document.getElementById("estado").value
+
+document.getElementById("crm").style.display="none"
+document.getElementById("citaBox").style.display="none"
+document.getElementById("notaBox").style.display="none"
+
+if(estado=="venta") document.getElementById("crm").style.display="block"
+
+if(estado=="cita") document.getElementById("citaBox").style.display="block"
+
+if(
+estado=="noestaba" ||
+estado=="pasar" ||
+estado=="responsable" ||
+estado=="noquieren" ||
+estado=="novolver"
+)
+document.getElementById("notaBox").style.display="block"
+
+}
+
+async function guardar(){
+
+let direccion=document.getElementById("direccion").value
+
+let r=await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${direccion}`)
+
+let d=await r.json()
+
+if(!d.length){
+alert("Dirección no encontrada")
+return
+}
+
+let lat=d[0].lat
+let lon=d[0].lon
+
+let estado=document.getElementById("estado").value
+
+let color="blue"
+
+if(estado=="venta") color="green"
+if(estado=="noquieren") color="red"
+if(estado=="cita") color="orange"
+
+let marker=L.circleMarker([lat,lon],{
+color:color,
+radius:8
+}).addTo(mapa)
+
+marker.bindPopup(direccion)
+
+datos.push({
+direccion,
+estado
+})
+
+localStorage.setItem("rutaDatos",JSON.stringify(datos))
+
+document.getElementById("direccion").value=""
+
+actualizarStats()
+
+}
+
+function actualizarStats(){
+
+let puertas=datos.length
+
+let ventas=datos.filter(d=>d.estado=="venta").length
+
+let citas=datos.filter(d=>d.estado=="cita").length
+
+let no=datos.filter(d=>d.estado=="noquieren").length
+
+document.getElementById("puertas").innerText=puertas
+document.getElementById("ventas").innerText=ventas
+document.getElementById("citas").innerText=citas
+document.getElementById("no").innerText=no
+
+}
+
+function exportar(){
+
+let texto="Direccion,Estado\n"
+
+datos.forEach(d=>{
+texto+=`${d.direccion},${d.estado}\n`
+})
+
+let blob=new Blob([texto])
+
+let a=document.createElement("a")
+
+a.href=URL.createObjectURL(blob)
+
+a.download="clientes.csv"
+
+a.click()
+
+}
+
+</script>
+
+</body>
+</html>
